@@ -1,0 +1,227 @@
+---
+title: "Data621 - Assignment1"
+author: "Ritesh Lohiya"
+date: "June 16, 2018"
+output: html_document
+---
+
+#HW #1 Assignment - Moneyball Model
+
+Overview In this homework assignment, you will explore, analyze and model a data set containing approximately 2200 records. Each record represents a professional baseball team from the years 1871 to 2006 inclusive. Each record has the performance of the team for the given year, with all of the statistics adjusted to match the performance of a 162 game season. 
+ 
+Your objective is to build a multiple linear regression model on the training data to predict the number of wins for the team. You can only use the variables given to you (or variables that you derive from the variables provided). Below is a short description of the variables of interest in the data set:
+
+
+```{r}
+#install.packages('caret')
+#install.packages('e1071', dependencies=TRUE)
+library(knitr)
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(psych)
+library(reshape)
+library(corrgram)
+library(mice)
+library(caret)
+library(e1071)
+```
+
+
+#DATA EXPLORATION:
+
+Load the data and understand the data by using some stats and plots.
+
+```{r} 
+mtd <- read.csv("https://raw.githubusercontent.com/Riteshlohiya/Data621-Assignment-1/master/moneyball-training-data.csv")
+count(mtd)
+names(mtd)
+summary(mtd)
+```
+
+The dataset consists of 17 elements, with 2276 total cases. There are multiple variables with missing (NA) values and TEAM-BATTING_HBP has the highest NAs.
+
+Checking for outliers:
+```{r}
+ggplot(stack(mtd), aes(x = ind, y = values)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 1000)) +
+  theme(legend.position="none") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) + 
+  theme(panel.background = element_rect(fill = 'grey'))
+```
+
+Checking for skewness in the data
+
+```{r}
+mtd1 = melt(mtd)
+ggplot(mtd1, aes(x= value)) + 
+    geom_density(fill='red') + facet_wrap(~variable, scales = 'free') 
+```
+
+As seen there are several variables that are skewed and also there are out liers.
+
+Finding correlations:
+
+```{r}
+mtd2 <- mtd[,-1 ]
+names(mtd2)
+cor(drop_na(mtd2))
+```
+
+```{r}
+pairs.panels(mtd2[1:8]) 
+pairs.panels(mtd2[9:16]) 
+```
+ 
+We can see there are some positively and some negatively correlated variables.
+
+#DATA PREPARATION 
+
+Removing the variables:
+
+```{r}
+mtd_f <- mtd[,-1 ]
+names(mtd_f)
+```
+
+The variable TEAM_BATTING_HBP is having mostly missing values so the variable will be removed completely.
+
+```{r}
+mtd_f <- mtd_f[,-10 ]
+names(mtd_f )
+```
+
+TEAM_PITCHING_HR and TEAM_BATTING_HR are highly correlated, so we can remove one of them.
+
+```{r}
+mtd_f <- mtd_f[,-11 ]
+names(mtd_f)
+```
+
+Imputing the NAs using Mice(pmm - predictive mean matching)
+
+```{r}
+imputed_mtd_Data <- mice(mtd_f, m=5, maxit = 5, method = 'pmm')
+imputed_mtd_Data <- complete(imputed_mtd_Data)
+summary(imputed_mtd_Data)
+```
+
+Centering and scaling was used to transform individual predictors in the dataset using the caret library.
+
+```{r}
+t = preProcess(imputed_mtd_Data, 
+                   c("BoxCox", "center", "scale"))
+mtd_final = data.frame(
+      t = predict(t, imputed_mtd_Data))
+
+summary(mtd_final)
+```
+
+```{r}
+mtd_final1 = melt(mtd_final)
+ggplot(mtd_final1, aes(x= value)) + 
+    geom_density(fill='red') + facet_wrap(~variable, scales = 'free') 
+```
+
+#BUILD MODELS:
+
+Model1:
+
+With all variables:
+
+```{r}
+model1 <- lm(t.TARGET_WINS ~., mtd_final)
+summary(model1)
+```
+
+Model2:
+
+With only the significant variables:
+
+```{r}
+model2 <- lm(t.TARGET_WINS ~ t.TEAM_BATTING_H  + t.TEAM_BATTING_3B  + t.TEAM_BATTING_HR  + t.TEAM_BATTING_BB + t.TEAM_BATTING_SO + t.TEAM_BASERUN_SB + t.TEAM_PITCHING_SO + t.TEAM_PITCHING_H + t.TEAM_PITCHING_SO + t.TEAM_FIELDING_E + t.TEAM_FIELDING_DP, mtd_final)
+summary(model2)
+```
+
+
+Model3:
+
+Further reducing the variables(TEAM_PITCHING_SO and TEAM_BATTING_SO are having high correlation, TEAM_BATTING_H and TEAM_PITCHING_H are also having high correlation, TEAM_BATTING_SO and TEAM_PITCHING_SO are also having high correlation):
+
+```{r}
+model3 <- lm(t.TARGET_WINS ~ t.TEAM_BATTING_H  + t.TEAM_BATTING_3B  + t.TEAM_BATTING_HR  + t.TEAM_BATTING_BB + t.TEAM_BATTING_SO + t.TEAM_BASERUN_SB  + t.TEAM_FIELDING_E + t.TEAM_FIELDING_DP, mtd_final)
+summary(model3)
+```
+
+#SELECT MODELS AND PREDICTION:
+
+```{r}
+summary(model1)
+summary(model2)
+summary(model3)
+```
+
+From the three models, I decided to use model3 for the predictions considering its more parsimonious model. There is no significant difference in R2, Adjusted R2 and RMSE even when i did the treatment for  multi-collinearity.
+
+#PREDICTION:
+
+For the evaluation dataset also we will be doing all the preprocessing steps.
+
+```{r} 
+med <- read.csv("https://raw.githubusercontent.com/Riteshlohiya/Data621-Assignment-1/master/moneyball-evaluation-data.csv")
+```
+
+Removing the variables:
+
+```{r}
+med_f <- med[,-1 ]
+names(med_f)
+```
+
+```{r}
+med_f <- med_f[,-10 ]
+names(med_f )
+```
+
+```{r}
+med_f <- med_f[,-11 ]
+names(med_f)
+```
+
+Imputing the NAs using Mice(pmm - predictive mean matching)
+
+```{r}
+imputed_med_Data <- mice(med_f, m=5, maxit = 5, method = 'pmm')
+imputed_med_Data <- complete(imputed_med_Data)
+summary(imputed_med_Data)
+```
+
+Centering and scaling was used to transform individual predictors in the dataset using the caret library.
+
+```{r}
+t = preProcess(imputed_med_Data, 
+                   c("BoxCox", "center", "scale"))
+med_final = data.frame(
+      t = predict(t, imputed_med_Data))
+
+summary(med_final)
+```
+
+```{r}
+eval_data <- predict(model3, newdata = med_final, interval="prediction")
+eval_data
+```
+
+```{r}
+summary(eval_data)
+```
+
+
+
+
+
+
+
+
