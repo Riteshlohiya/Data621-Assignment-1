@@ -60,9 +60,9 @@ ggplot(mtd1, aes(x= value)) +
     geom_density(fill='red') + facet_wrap(~variable, scales = 'free') 
 ```
 
-As seen there are several variables that are skewed and also there are out liers.
+As seen there are several variables that are skewed and also there are outliers.
 
-Finding correlations:
+Finding correlations: 
 
 ```{r}
 mtd2 <- mtd[,-1 ]
